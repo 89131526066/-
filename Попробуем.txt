@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дашборд McKinsey & Company</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #e8f4ff, #ffffff);
+            color: #333;
+            min-height: 100vh;
+        }
+        .header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #0056b3, #007bff);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+        }
+        .summary {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.1);
+            padding: 20px;
+            width: 100%;
+            margin: 20px 0;
+        }
+        .upload-section {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .upload-section input[type="file"] {
+            padding: 10px;
+            border: 2px solid #007bff;
+            border-radius: 6px;
+            background: white;
+            flex: 1;
+        }
+        .upload-section button {
+            padding: 10px 25px;
+            background: linear-gradient(135deg, #0069d9, #007bff);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+        }
+        .tabs {
+            display: flex;
+            gap: 15px;
+            margin: 25px 0;
+            background: rgba(0, 123, 255, 0.1);
+            padding: 8px;
+            border-radius: 8px;
+        }
+        .tab {
+            padding: 14px 30px;
+            background: rgba(0, 123, 255, 0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        .tab.active {
+            background: linear-gradient(135deg, #0069d9, #007bff);
+            color: white;
+            box-shadow: 0 2px 6px rgba(0, 123, 255, 0.3);
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0, 123, 255, 0.1);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .full-width-chart {
+            grid-column: 1 / -1;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.1);
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        h2 {
+            color: #007bff;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 8px;
+            font-weight: 600;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.1);
+        }
+        th {
+            background: linear-gradient(135deg, #0069d9, #007bff);
+            color: white;
+            padding: 14px;
+            text-align: left;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        th.sortable:hover {
+            background: #0056b3;
+        }
+        td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+        }
+        tr:hover {
+            background-color: #f1f8ff;
+        }
+        .text-danger { color: #dc3545; }
+        .text-success { color: #28a745; }
+        .text-warning { color: #ffc107; }
+        .lifecycle-table {
+            margin: 20px 0;
+        }
+        .gantt-bar {
+            height: 25px;
+            background: linear-gradient(90deg, #007bff, #0069d9);
+            border-radius: 4px;
+            position: relative;
+            margin: 5px 0;
+        }
+        .gantt-label {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="mckinsey-blue">Дашборд по идеям офиса</h1>
+        <div class="upload-section">
+            <input type="file" id="filesInput" accept=".xlsx, .xls" multiple required>
+            <button onclick="loadData()">Обновить данные</button>
+        </div>
+    </div>
+
+    <div class="summary">
+        <h2>Сводная статистика</h2>
+        <div style="display: flex; gap: 40px; flex-wrap: wrap">
+            <p>Всего идей: <strong id="totalIdeas">0</strong></p>
+            <p>Среднее время рассмотрения: <strong id="avgLifecycle">0 дней</strong></p>
+            <p>Идеи на доработке: <span id="reworkCount" class="text-warning">0</span></p>
+            <p>Реализованные идеи: <span id="implementedCount" class="text-success">0</span></p>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('charts')">Графики</div>
+        <div class="tab" onclick="showTab('topAuthors')">Топ авторов</div>
+        <div class="tab" onclick="showTab('data')">Данные</div>
+        <div class="tab" onclick="showTab('departments')">Отделы</div>
+        <div class="tab" onclick="showTab('lifecycle')">Жизненный цикл</div>
+    </div>
+
+    <div id="charts" class="tab-content active">
+        <div class="container">
+            <div class="chart-container">
+                <h2>Статусы идей</h2>
+                <canvas id="statusChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Юридические лица</h2>
+                <canvas id="ulChart"></canvas>
+            </div>
+            <div class="chart-container full-width-chart">
+                <h2>Жизненный цикл идей</h2>
+                <canvas id="lifecycleChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="topAuthors" class="tab-content">
+        <div class="chart-container full-width-chart">
+            <h2>Топ авторов</h2>
+            <canvas id="authorChart"></canvas>
+        </div>
+    </div>
+
+    <div id="data" class="tab-content">
+        <h2>Все идеи</h2>
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Дата подачи</th>
+                    <th>Статус</th>
+                    <th>Название</th>
+                    <th>Автор</th>
+                    <th>ЮЛ</th>
+                    <th>Описание</th>
+                    <th>Решение</th>
+                    <th>Дней B→R</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Данные загружаются динамически -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="departments" class="tab-content">
+        <h2>Статистика по отделам</h2>
+        <table id="departmentTable">
+            <thead>
+                <tr>
+                    <th onclick="sortDepartments('total')" class="sortable">Количество идей ▼</th>
+                    <th>Отдел</th>
+                    <th>Реализовано</th>
+                    <th>Отклонено</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Данные загружаются динамически -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="lifecycle" class="tab-content">
+        <h2>Жизненный цикл идей</h2>
+        <div id="lifecycleContainer"></div>
+    </div>
+
+<script>
+    let ideasData = [];
+    let departments = {};
+    let charts = [];
+    let sortDirection = -1;
+
+    async function loadData() {
+        try {
+            const files = document.getElementById('filesInput').files;
+            if (files.length < 2) throw new Error('Выберите оба файла');
+
+            // Сброс данных
+            ideasData = [];
+            departments = {};
+            charts.forEach(chart => chart.destroy());
+            charts = [];
+            document.querySelectorAll('table tbody').forEach(tbody => tbody.innerHTML = '');
+            document.getElementById('lifecycleContainer').innerHTML = '';
+
+            // Чтение файлов
+            const fileContents = await Promise.all(
+                Array.from(files).map(file => readFile(file))
+            );
+
+            // Определение типов файлов
+            let ideas, depData;
+            fileContents.forEach(content => {
+                if (content[0].some(h => h && h.toString().toLowerCase().includes('фио'))) {
+                    depData = content;
+                } else if (content[0].some(h => h && h.toString().toLowerCase().includes('id'))) {
+                    ideas = content;
+                }
+            });
+
+            if (!ideas || !depData) throw new Error('Не найдены необходимые файлы');
+
+            // Обработка данных
+            processDepartments(depData);
+            processIdeas(ideas);
+            mergeData();
+            
+            // Рендеринг
+            renderCharts();
+            renderAuthorChart();
+            renderDataTable();
+            renderDepartmentTable();
+            renderLifecycle();
+            renderSummary();
+
+        } catch (error) {
+            alert(`Ошибка: ${error.message}`);
+        }
+    }
+
+    function readFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                resolve(XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ''}));
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function processDepartments(data) {
+        const headers = data[0];
+        const fioIndex = headers.findIndex(h => 
+            h && h.toString().toLowerCase().includes('фио')
+        );
+        const depIndex = headers.findIndex(h => 
+            h && h.toString().toLowerCase().includes('отдел')
+        );
+        
+        data.slice(1).forEach(row => {
+            if (row[fioIndex] && row[depIndex]) {
+                const fio = row[fioIndex].toString().trim().replace(/\s+/g, ' ');
+                departments[fio] = row[depIndex].toString().trim();
+            }
+        });
+    }
+
+    function processIdeas(data) {
+        const headers = data[0];
+        ideasData = data.slice(1).map(row => {
+            const entry = {};
+            headers.forEach((header, idx) => {
+                entry[header] = row[idx] || '-';
+            });
+            entry['ЮЛ (Юридическое лицо)'] = normalizeUL(entry['ЮЛ (Юридическое лицо)']);
+            return entry;
+        }).filter(idea => idea.ID !== '-');
+    }
+
+    function normalizeUL(ul) {
+        if (typeof ul !== 'string') return '-';
+        return ul.replace(/["\s]/g, '')
+                 .toUpperCase()
+                 .replace(/(АО|ООО)/g, '$1 ')
+                 .replace(/\s+/g, ' ');
+    }
+
+    function mergeData() {
+        ideasData.forEach(idea => {
+            const author = idea.Автор.split(' / ')[0].trim();
+            idea.Отдел = departments[author] || 'Не указан';
+        });
+    }
+
+    function renderCharts() {
+        // График статусов
+        const statusCounts = ideasData.reduce((acc, idea) => {
+            acc[idea.Статус] = (acc[idea.Статус] || 0) + 1;
+            return acc;
+        }, {});
+
+        new Chart(document.getElementById('statusChart'), {
+            type: 'pie',
+            data: {
+                labels: Object.keys(statusCounts),
+                datasets: [{
+                    data: Object.values(statusCounts),
+                    backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6c757d'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // График ЮЛ
+        const ulCounts = ideasData.reduce((acc, idea) => {
+            const key = idea['ЮЛ (Юридическое лицо)'];
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+
+        new Chart(document.getElementById('ulChart'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(ulCounts),
+                datasets: [{
+                    label: 'Юридические лица',
+                    data: Object.values(ulCounts),
+                    backgroundColor: '#007bff'
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true } }
+            }
+        });
+
+        // График жизненного цикла
+        const lifecycle = ideasData.map(idea => {
+            const submitDate = parseDate(idea['Дата подачи идеи']);
+            const decisionDate = parseDate(idea['Дата принятия/отклонения']) || new Date();
+            return Math.ceil((decisionDate - submitDate) / (1000*60*60*24));
+        });
+
+        new Chart(document.getElementById('lifecycleChart'), {
+            type: 'line',
+            data: {
+                labels: Array.from({length: Math.max(...lifecycle)}, (_,i) => i+1),
+                datasets: [{
+                    label: 'Дни',
+                    data: lifecycle.reduce((acc, days) => {
+                        acc[days] = (acc[days] || 0) + 1;
+                        return acc;
+                    }, {}),
+                    borderColor: '#007bff',
+                    fill: true,
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    tension: 0.3
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    function renderAuthorChart() {
+        const authorCounts = ideasData.reduce((acc, idea) => {
+            const author = idea.Автор.split(' / ')[0].trim();
+            acc[author] = (acc[author] || 0) + 1;
+            return acc;
+        }, {});
+
+        new Chart(document.getElementById('authorChart'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(authorCounts),
+                datasets: [{
+                    label: 'Количество идей',
+                    data: Object.values(authorCounts),
+                    backgroundColor: 'rgba(23, 162, 184, 0.8)',
+                    borderColor: '#17a2b8',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderDataTable() {
+        const tbody = document.querySelector('#dataTable tbody');
+        tbody.innerHTML = '';
+        
+        ideasData.forEach(idea => {
+            const row = tbody.insertRow();
+            row.insertCell().textContent = idea.ID;
+            
+            const submitDate = parseDate(idea['Дата подачи идеи']);
+            row.insertCell().textContent = submitDate?.toLocaleDateString() || '-';
+            
+            const statusCell = row.insertCell();
+            statusCell.textContent = idea.Статус;
+            statusCell.className = idea.Статус === 'Реализовано' ? 'text-success' : 
+                                  idea.Статус === 'Отклонено' ? 'text-danger' : 
+                                  idea.Статус === 'На доработке' ? 'text-warning' : '';
+            
+            row.insertCell().textContent = idea.Название || '-';
+            row.insertCell().textContent = idea.Автор.split(' / ')[0].trim();
+            row.insertCell().textContent = idea['ЮЛ (Юридическое лицо)'];
+            row.insertCell().textContent = idea.Описание || '-';
+            row.insertCell().textContent = idea['Предлагаемое решение'] || '-';
+            
+            const decisionDate = parseDate(idea['Дата принятия/отклонения']);
+            const daysBR = submitDate && decisionDate 
+                ? Math.ceil((decisionDate - submitDate) / (1000*60*60*24)) 
+                : '-';
+            row.insertCell().textContent = daysBR;
+        });
+    }
+
+    function renderDepartmentTable() {
+        const tbody = document.querySelector('#departmentTable tbody');
+        tbody.innerHTML = '';
+        
+        const depCounts = ideasData.reduce((acc, idea) => {
+            acc[idea.Отдел] = acc[idea.Отдел] || {total: 0, implemented: 0, rejected: 0};
+            acc[idea.Отдел].total += 1;
+            if (idea.Статус === 'Реализовано') acc[idea.Отдел].implemented += 1;
+            if (idea.Статус === 'Отклонено') acc[idea.Отдел].rejected += 1;
+            return acc;
+        }, {});
+
+        const sortedDepartments = Object.entries(depCounts)
+            .sort((a, b) => sortDirection * (b[1].total - a[1].total));
+
+        sortedDepartments.forEach(([dep, counts]) => {
+            const row = tbody.insertRow();
+            const totalCell = row.insertCell();
+            totalCell.textContent = counts.total;
+            
+            const depCell = row.insertCell();
+            depCell.textContent = dep;
+            
+            const implementedCell = row.insertCell();
+            implementedCell.textContent = counts.implemented;
+            implementedCell.className = 'text-success';
+            
+            const rejectedCell = row.insertCell();
+            rejectedCell.textContent = counts.rejected;
+            rejectedCell.className = 'text-danger';
+        });
+    }
+
+    function renderLifecycle() {
+        const container = document.getElementById('lifecycleContainer');
+        container.innerHTML = ideasData.map(idea => {
+            const submitDate = parseDate(idea['Дата подачи идеи']);
+            const decisionDate = parseDate(idea['Дата принятия/отклонения']) || new Date();
+            const planDate = parseDate(idea['План. Дата реализации']);
+            const factDate = parseDate(idea['Факт. Дата реализации']);
+            
+            const daysToDecision = submitDate 
+                ? Math.ceil((decisionDate - submitDate) / (1000*60*60*24)) 
+                : '-';
+            const daysToFact = planDate && factDate 
+                ? Math.ceil((factDate - planDate) / (1000*60*60*24)) 
+                : '-';
+            
+            const barWidth = submitDate 
+                ? `${(daysToDecision / 30)*100}%` 
+                : '100%';
+            
+            return `
+                <div class="lifecycle-table">
+                    <h3>${idea.Название || 'Без названия'}</h3>
+                    <div class="gantt-bar" style="width: ${barWidth}">
+                        <div class="gantt-label">${daysToDecision !== '-' ? `${daysToDecision} дней` : 'В процессе'}</div>
+                    </div>
+                    <div class="lifecycle-stage">
+                        <strong>Дата подачи:</strong> ${submitDate?.toLocaleDateString() || '-'}
+                    </div>
+                    <div class="lifecycle-stage">
+                        <strong>План. дата:</strong> ${planDate?.toLocaleDateString() || '-'}
+                    </div>
+                    <div class="lifecycle-stage">
+                        <strong>Факт. дата:</strong> ${factDate?.toLocaleDateString() || '-'}
+                    </div>
+                    <div class="lifecycle-stage">
+                        <strong>Статус:</strong> ${idea.Статус || '-'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderSummary() {
+        document.getElementById('totalIdeas').textContent = ideasData.length;
+        
+        const validLifecycle = ideasData
+            .filter(idea => parseDate(idea['Дата подачи идеи']) && parseDate(idea['Дата принятия/отклонения']))
+            .map(idea => 
+                (parseDate(idea['Дата принятия/отклонения']) - parseDate(idea['Дата подачи идеи'])) / (1000*60*60*24)
+            );
+            
+        const avg = validLifecycle.length 
+            ? (validLifecycle.reduce((a,b) => a + b, 0)/validLifecycle.length).toFixed(1) 
+            : 0;
+        document.getElementById('avgLifecycle').textContent = avg;
+
+        document.getElementById('reworkCount').textContent = 
+            ideasData.filter(idea => idea.Статус === 'На доработке').length;
+
+        document.getElementById('implementedCount').textContent = 
+            ideasData.filter(idea => idea.Статус === 'Реализовано').length;
+    }
+
+    function parseDate(dateValue) {
+        if (!dateValue || dateValue === '-') return null;
+        
+        if (typeof dateValue === 'number') {
+            const excelEpoch = new Date(1899, 11, 30);
+            return new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
+        }
+        
+        if (typeof dateValue === 'string') {
+            const [d, m, y] = dateValue.split('.').map(Number);
+            return new Date(y || new Date().getFullYear(), m-1, d);
+        }
+        
+        return null;
+    }
+
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(content => 
+            content.style.display = content.id === tabId ? 'block' : 'none'
+        );
+        document.querySelectorAll('.tab').forEach(tab => 
+            tab.classList.toggle('active', tab.getAttribute('onclick').includes(tabId))
+        );
+    }
+
+    function sortDepartments(column) {
+        sortDirection *= -1;
+        renderDepartmentTable();
+    }
+
+    document.getElementById('filesInput').addEventListener('change', () => {
+        if (document.getElementById('filesInput').files.length >= 2) {
+            loadData();
+        }
+    });
+</script>
+</body>
+</html>
